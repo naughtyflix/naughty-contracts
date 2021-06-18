@@ -626,12 +626,20 @@ contract BEP20 is Context, IBEP20, Ownable {
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
+    mapping (address => bool) private _isExcludedFromFee;
 
     uint256 private _totalSupply;
 
     string private _name;
     string private _symbol;
     uint8 private _decimals;
+    
+    uint256 public _maxTxAmount = 1000000 * 10**18;
+    uint256 public _burnFee = 2;
+    uint256 private _previousBurnFee = _burnFee;
+    uint256 public _marketingFee = 3;
+    address public marketingWallet = 0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db;
+    uint256 private _previousmarketingFee = _marketingFee;
 
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
@@ -646,6 +654,8 @@ contract BEP20 is Context, IBEP20, Ownable {
         _name = name;
         _symbol = symbol;
         _decimals = 18;
+        _isExcludedFromFee[owner()] = true;
+        _isExcludedFromFee[address(this)] = true;
     }
 
     /**
@@ -793,7 +803,21 @@ contract BEP20 is Context, IBEP20, Ownable {
         _mint(_msgSender(), amount);
         return true;
     }
+    
+    
+    function removeAllFee() private {
+        _burnFee = 0;
+        _marketingFee = 0;
+    }
 
+    function restoreAllFee() private {
+        _burnFee = 2;
+        _marketingFee = 3;
+    }
+    
+    function isExcludedFromFee(address account) public view returns(bool) {
+        return _isExcludedFromFee[account];
+    }
     /**
      * @dev Moves tokens `amount` from `sender` to `recipient`.
      *
@@ -811,11 +835,29 @@ contract BEP20 is Context, IBEP20, Ownable {
     function _transfer (address sender, address recipient, uint256 amount) internal {
         require(sender != address(0), 'BEP20: transfer from the zero address');
         require(recipient != address(0), 'BEP20: transfer to the zero address');
+        require(amount > 0, "Transfer amount must be greater than zero");
+        
+        if(_isExcludedFromFee[sender] || _isExcludedFromFee[recipient]){
+            removeAllFee();
+        }
+        else{
+            require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
+        }
+        uint256 marketingAmt = amount.mul(_marketingFee).div(100);
+        uint256 burnAmt = amount.mul(_burnFee).div(100);
 
         _balances[sender] = _balances[sender].sub(amount, 'BEP20: transfer amount exceeds balance');
-        _balances[recipient] = _balances[recipient].add(amount);
+        _balances[recipient] = _balances[recipient].add(amount.sub(burnAmt).sub(marketingAmt));
+        _burn(sender,burnAmt);
+        _balances[marketingWallet] = _balances[marketingWallet].add(marketingAmt);
+        
+        if(_isExcludedFromFee[sender] || _isExcludedFromFee[recipient])
+            restoreAllFee();
+        
         emit Transfer(sender, recipient, amount);
     }
+
+
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
@@ -847,7 +889,6 @@ contract BEP20 is Context, IBEP20, Ownable {
      */
     function _burn(address account, uint256 amount) internal {
         require(account != address(0), 'BEP20: burn from the zero address');
-
         _balances[account] = _balances[account].sub(amount, 'BEP20: burn amount exceeds balance');
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
@@ -883,6 +924,13 @@ contract BEP20 is Context, IBEP20, Ownable {
     function _burnFrom(address account, uint256 amount) internal {
         _burn(account, amount);
         _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, 'BEP20: burn amount exceeds allowance'));
+    }
+    
+    function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
+        require(maxTxPercent > 10, "Cannot set transaction amount less than 10 percent!");
+        _maxTxAmount = _totalSupply.mul(maxTxPercent).div(
+            10**2
+        );
     }
 }
 
