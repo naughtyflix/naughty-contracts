@@ -719,8 +719,8 @@ contract FlixToken is Context, IBEP20, Ownable {
             if (from == pcsV2Pair && to != address(pcsV2Router) && !_isExcludedFromFee[to]) {
                 require(tradingOpen);
                 require(amount <= _maxTxAmount);
-
-        
+                
+                
             }
             uint256 contractTokenBalance = balanceOf(address(this));
             if (!inSwap && from != pcsV2Pair && swapEnabled) {
@@ -736,7 +736,7 @@ contract FlixToken is Context, IBEP20, Ownable {
         }
         bool takeFee = true;
 
-        if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
+        if (_isExcludedFromFee[from] || _isExcludedFromFee[to] || from == pcsV2Pair) {
             takeFee = false;
         }
 
