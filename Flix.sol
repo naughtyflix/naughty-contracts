@@ -564,8 +564,8 @@ interface IPancakePair {
 
 contract FlixToken is Context, IBEP20, Ownable {
     using SafeMath for uint256;
-    string private constant _name = "FlixTest";
-    string private constant _symbol = "FLIXER" ;
+    string private constant _name = "NaughtyFlix";
+    string private constant _symbol = "NGFX" ;
     uint8 private constant _decimals = 18;
     mapping(address => uint256) private _rOwned;
     mapping(address => uint256) private _tOwned;
@@ -577,17 +577,15 @@ contract FlixToken is Context, IBEP20, Ownable {
     uint256 private _tFeeTotal;
     uint256 public _taxFee = 1;
     uint256 private _previoustaxFee = _taxFee;
-    uint256 public _teamFee = 5;
+    uint256 public _teamFee = 6;
     uint256 private _previousteamFee = _teamFee;
-    uint256 public _masterFee = 1;
-    uint256 private _previousmasterFee=_masterFee;
     mapping(address => bool) private bots;
     address payable private _teamAddress;
     address payable private _marketingFunds;
     address payable private _charityAddress;
     address payable private masterChef;
-    IPancakeRouter02 private pcsV2Router;
-    address private pcsV2Pair;
+    IPancakeRouter02 public pcsV2Router;
+    address public pcsV2Pair;
     bool private tradingOpen = true;
     bool private liquidityAdded = false;
     bool private inSwap = false;
@@ -667,16 +665,16 @@ contract FlixToken is Context, IBEP20, Ownable {
     }
     
     function removeAllFee() private {
-        if (_taxFee == 0 && _teamFee == 0 && _masterFee == 0) return;
+        if (_taxFee == 0 && _teamFee == 0) return;
         _taxFee = 0;
         _teamFee = 0;
-        _masterFee = 0;
+        
     }
 
     function restoreAllFee() private {
         _taxFee = 1;
-        _teamFee = 5;
-        _masterFee = 1;
+        _teamFee = 6;
+        
     }
     
     function setFee(uint256 multiplier) private {
@@ -714,34 +712,37 @@ contract FlixToken is Context, IBEP20, Ownable {
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
 
-        if (from != owner() && to != owner() && to != pcsV2Pair) {
+        if (from != owner() && to != owner()) {
             require(!bots[from] && !bots[to]);
-            if (from == pcsV2Pair && to != address(pcsV2Router) && !_isExcludedFromFee[to]) {
+            if (from == pcsV2Pair && to != address(pcsV2Router)) {
                 require(tradingOpen);
                 require(amount <= _maxTxAmount);
+                _taxFee = 0;
+                _teamFee = 0;
                 
                 
             }
-            uint256 contractTokenBalance = balanceOf(address(this));
+             uint256 contractTokenBalance = balanceOf(address(this));
             if (!inSwap && from != pcsV2Pair && swapEnabled) {
-                require(amount <= balanceOf(pcsV2Pair).mul(3).div(100) && amount <= _maxTxAmount);
+                
                 
                 swapTokensForEth(contractTokenBalance);
                 uint256 contractETHBalance = address(this).balance;
                 if (contractETHBalance > 0) {
                     sendETHToFee(address(this).balance);
                 }
-            
+                
             }
         }
         bool takeFee = true;
+
 
         if (_isExcludedFromFee[from] || _isExcludedFromFee[to] || from == pcsV2Pair) {
             takeFee = false;
         }
 
         _tokenTransfer(from, to, amount, takeFee);
-        
+        restoreAllFee;
     }
 
     function swapTokensForEth(uint256 tokenAmount) private lockTheSwap {
@@ -770,7 +771,7 @@ contract FlixToken is Context, IBEP20, Ownable {
     }
 
     function addLiquidity() external onlyOwner() {
-        IPancakeRouter02 _pancakeswapV2Router =  IPancakeRouter02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        IPancakeRouter02 _pancakeswapV2Router =  IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
         pcsV2Router = _pancakeswapV2Router;
         _approve(address(this), address(pcsV2Router), _tTotal);
         pcsV2Pair = IPancakeFactory(_pancakeswapV2Router.factory()).createPair(address(this), _pancakeswapV2Router.WETH());
@@ -799,12 +800,9 @@ contract FlixToken is Context, IBEP20, Ownable {
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tTeam, uint256 tMaster) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tTeam) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        uint256 currentRate = _getRate();
-        uint256 rMaster = tMaster.mul(currentRate);
-        _rOwned[masterChef] = _rOwned[masterChef].add(rMaster);
         _takeTeam(tTeam);
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
@@ -824,8 +822,6 @@ contract FlixToken is Context, IBEP20, Ownable {
     function disableAllFees() external onlyOwner() {
         _taxFee = 0;
         _previoustaxFee = _taxFee;
-        _masterFee = 0;
-        _previousmasterFee=_masterFee;
         _teamFee = 0;
         _previousteamFee = _teamFee;
     }
@@ -833,37 +829,32 @@ contract FlixToken is Context, IBEP20, Ownable {
     function enableAllFees() external onlyOwner() {
         _taxFee = 1;
         _previoustaxFee = _taxFee;
-        _masterFee = 1;
-        _previousmasterFee=_masterFee;
-        _teamFee = 5;
+        
+        _teamFee = 6;
         _previousteamFee = _teamFee;
     }
     receive() external payable {}
 
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tTeam, uint256 tMaster) = _getTValues(tAmount, _taxFee, _teamFee, _masterFee);
+    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount, uint256 tFee, uint256 tTeam) = _getTValues(tAmount, _taxFee, _teamFee);
         uint256 currentRate = _getRate();
-        uint256 tAmount2 = tAmount;
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount2, tFee, tTeam, tMaster, currentRate);
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tTeam, tMaster);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tTeam, currentRate);
+        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tTeam);
     }
 
-    function _getTValues(uint256 tAmount, uint256 taxFee, uint256 teamFee, uint256 masterFee) private view returns (uint256, uint256, uint256, uint256) {
+    function _getTValues(uint256 tAmount, uint256 taxFee, uint256 teamFee) private view returns (uint256, uint256, uint256) {
         uint256 multiplier = _getAntiDumpMultiplier();
         uint256 tFee = tAmount.mul(taxFee).div(100).mul(multiplier);
-        uint256 tAmount1 = tAmount;
-        uint256 tTeam = tAmount1.mul(teamFee).div(100).mul(multiplier);
-        uint256 tMaster = tAmount1.mul(masterFee).div(100).mul(multiplier);
-        uint256 tTransferAmount = tAmount1.sub(tFee).sub(tTeam).sub(tMaster);
-        return (tTransferAmount, tFee, tTeam, tMaster);
+        uint256 tTeam = tAmount.mul(teamFee).div(100).mul(multiplier);
+        uint256 tTransferAmount = tAmount.sub(tFee).sub(tTeam);
+        return (tTransferAmount, tFee, tTeam);
     }
 
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tTeam, uint256 tMaster, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tTeam, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rTeam = tTeam.mul(currentRate);
-        uint256 rMaster = tMaster.mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rTeam).sub(rMaster);
+        uint256 rTransferAmount = rAmount.sub(rFee).sub(rTeam);
         return (rAmount, rTransferAmount, rFee);
     }
 
@@ -877,6 +868,14 @@ contract FlixToken is Context, IBEP20, Ownable {
         uint256 tSupply = _tTotal;
         if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
         return (rSupply, tSupply);
+    }
+    function setPairAddress(address newRouter) public onlyOwner() {
+        pcsV2Pair = newRouter;
+    }
+    function setRouterAddress(address newRouter) public onlyOwner() {
+        IPancakeRouter02 _pancakeswapV2Router =  IPancakeRouter02(newRouter);
+        pcsV2Router = _pancakeswapV2Router;
+
     }
 
 }
